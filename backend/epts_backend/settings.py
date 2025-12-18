@@ -51,9 +51,9 @@ INSTALLED_APPS = [
 # MIDDLEWARE
 # -------------------------------------------------------------------
 MIDDLEWARE = [
-    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -219,13 +219,24 @@ SIMPLE_JWT = {
 }
 
 # -------------------------------------------------------------------
-# CORS SETTINGS
+# CORS SETTINGS (UPDATED)
 # -------------------------------------------------------------------
 CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_ALL_ORIGINS = True  # ✅ ADD THIS
 
+# Keep your existing ones too
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "http://localhost:3001",
+    "http://127.0.0.1:3001",
+]
+
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:3001",
+    "http://127.0.0.1:3001",
 ]
 
 CORS_ALLOW_HEADERS = [
@@ -238,6 +249,7 @@ CORS_ALLOW_HEADERS = [
     "user-agent",
     "x-csrftoken",
     "x-requested-with",
+    "access-control-allow-origin",
 ]
 
 CORS_ALLOW_METHODS = [
@@ -248,6 +260,13 @@ CORS_ALLOW_METHODS = [
     "POST",
     "PUT",
 ]
+
+# ✅ ADD THESE NEW SETTINGS
+CORS_PREFLIGHT_MAX_AGE = 86400
+CORS_EXPOSE_HEADERS = ["Content-Type", "Authorization"]
+
+# ✅ CRITICAL: This tells django-cors-headers to process ALL URLs
+CORS_URLS_REGEX = r'^.*$'
 
 # -------------------------------------------------------------------
 # SECURITY CONFIGURATION

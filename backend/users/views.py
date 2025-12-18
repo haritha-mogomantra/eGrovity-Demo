@@ -18,6 +18,8 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from users.models import generate_strong_password
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
 import re
 
 from employee.models import Employee, Department
@@ -49,10 +51,25 @@ def is_admin_or_manager(user):
 # ===========================================================
 # 1. LOGIN
 # ===========================================================
+@method_decorator(csrf_exempt, name="dispatch")
 class ObtainTokenPairView(TokenObtainPairView):
     """POST /api/users/login/ — Login via emp_id, username, or email."""
     serializer_class = CustomTokenObtainPairSerializer
     permission_classes = [AllowAny]
+    authentication_classes = []  # ✅ ADD THIS - Disable authentication for login
+
+    def options(self, request, *args, **kwargs):
+        """Handle CORS preflight OPTIONS request"""
+        origin = request.META.get('HTTP_ORIGIN', 'http://localhost:3001')
+        
+        response = Response(status=status.HTTP_200_OK)
+        response["Access-Control-Allow-Origin"] = origin
+        response["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+        response["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+        response["Access-Control-Allow-Credentials"] = "true"
+        response["Access-Control-Max-Age"] = "86400"
+        
+        return response
 
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -111,6 +128,8 @@ class ObtainTokenPairView(TokenObtainPairView):
         username = user.username
         role = user.role
 
+        origin = request.META.get('HTTP_ORIGIN', 'http://localhost:3001')
+
         return Response(
             {
                 "access": data.get("access"),
@@ -137,6 +156,10 @@ class ObtainTokenPairView(TokenObtainPairView):
             status=status.HTTP_200_OK,
         )
 
+        response["Access-Control-Allow-Origin"] = origin
+        response["Access-Control-Allow-Credentials"] = "true"
+        
+        return response
 
 # ===========================================================
 # 2. REFRESH TOKEN

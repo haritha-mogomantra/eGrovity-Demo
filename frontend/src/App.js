@@ -11,58 +11,62 @@ const Register = React.lazy(() => import("./views/pages/register/Register"));
 const Page404 = React.lazy(() => import("./views/pages/page404/Page404"));
 const Page500 = React.lazy(() => import("./views/pages/page500/Page500"));
 
-const App = () => {
-
-  useEffect(() => {
-    // FORCE fresh login every time app opens
-    localStorage.removeItem("access_token");
-    localStorage.removeItem("refresh_token");
-    localStorage.removeItem("role");
-    localStorage.removeItem("emp_id");
-    localStorage.removeItem("employee_name");
-    localStorage.removeItem("department");
-    localStorage.removeItem("manager");
-
-    window.location.hash = "#/login";
-  }, []);
-
-  React.useEffect(() => {
-    const checkLoginRoute = () => {
-      const currentHash = window.location.hash;
-      const token = localStorage.getItem("access_token");
-
-      if (currentHash === "#/login" && !token) {
-        localStorage.removeItem("access_token");
-        localStorage.removeItem("refresh_token");
-        localStorage.removeItem("role");
-        localStorage.removeItem("emp_id");
-        localStorage.removeItem("employee_name");
-        localStorage.removeItem("department");
-        localStorage.removeItem("manager");
-      }
-    };
-  }, []);
-
-  
-//  ProtectedRoute
-const ProtectedRoute = ({ children, allowedRoles }) => {
+const isTokenValid = () => {
   const token = localStorage.getItem("access_token");
-  const role = localStorage.getItem("role")?.toLowerCase();
+  if (!token) return false;
 
-  if (!token) {
-    window.location.hash = "#/login";
-    return null;
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    const expiry = payload.exp * 1000;
+    return Date.now() < expiry;
+  } catch {
+    return false;
   }
-
-  if (allowedRoles && role && !allowedRoles.includes(role)) {
-    window.location.hash = "#/login";
-    return null;
-  }
-  return children;
 };
 
+const App = () => {
+  // ✅ Clear auth data ONLY when app is closed and reopened
+  useEffect(() => {
+    // Check if this is a fresh browser session (not just a refresh)
+    const isNewSession = !sessionStorage.getItem("app_initialized");
+    
+    if (isNewSession) {
+      console.log("🔄 New browser session detected - clearing auth data");
+      localStorage.removeItem("access_token");
+      localStorage.removeItem("refresh_token");
+      localStorage.removeItem("role");
+      localStorage.removeItem("emp_id");
+      localStorage.removeItem("employee_name");
+      localStorage.removeItem("department");
+      localStorage.removeItem("manager");
+      
+      // Mark session as initialized
+      sessionStorage.setItem("app_initialized", "true");
+    }
+  }, []);
 
-return (
+  // ✅ PROTECTED ROUTE COMPONENT
+  const ProtectedRoute = ({ children, allowedRoles }) => {
+    const tokenValid = isTokenValid();
+    const role = localStorage.getItem("role")?.toLowerCase();
+
+    if (!tokenValid) {
+      return <Navigate to="/login" replace />;
+    }
+
+    if (!role) {
+      localStorage.clear();
+      return <Navigate to="/login" replace />;
+    }
+
+    if (allowedRoles && !allowedRoles.includes(role)) {
+      return <Navigate to="/login" replace />;
+    }
+
+    return children;
+  };
+
+  return (
     <HashRouter>
       <Suspense
         fallback={
@@ -72,11 +76,25 @@ return (
         }
       >
         <Routes>
-          <Route exact path="/login" element={<Login />} />
-          <Route exact path="/register" element={<Register />} />
-          <Route exact path="/404" element={<Page404 />} />
-          <Route exact path="/500" element={<Page500 />} />
+          {/* ROOT ROUTE - Check if logged in, otherwise go to login */}
+          <Route 
+            path="/" 
+            element={
+              isTokenValid() ? (
+                <Navigate to="/dashboard" replace />
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            } 
+          />
 
+          {/* PUBLIC ROUTES */}
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/404" element={<Page404 />} />
+          <Route path="/500" element={<Page500 />} />
+
+          {/* PROTECTED ROUTES */}
           <Route
             path="/*"
             element={
@@ -85,6 +103,8 @@ return (
               </ProtectedRoute>
             }
           />
+
+          {/* FALLBACK */}
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </Suspense>
