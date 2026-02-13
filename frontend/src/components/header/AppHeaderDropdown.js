@@ -6,11 +6,24 @@ import {
   CDropdownMenu,
   CDropdownItem,
 } from "@coreui/react";
+import axiosInstance from "../../utils/axiosInstance";
 
 const AppHeaderDropdown = ({ userRole }) => {
-  const first = localStorage.getItem("first_name") || "";
-  const last = localStorage.getItem("last_name") || "";
-  const fullName = `${first} ${last}`.trim() || "User";
+  const [fullName, setFullName] = React.useState("User");
+
+  React.useEffect(() => {
+    const first = localStorage.getItem("first_name") || "";
+    const last = localStorage.getItem("last_name") || "";
+    const username = localStorage.getItem("username") || "";
+
+    const name =
+      `${first} ${last}`.trim() ||
+      username ||
+      "User";
+
+    setFullName(name);
+  }, []);
+
   const role = (localStorage.getItem("role") || "").toLowerCase();
 
   // 🔹 PROFILE PICTURE STATE
@@ -29,15 +42,13 @@ const AppHeaderDropdown = ({ userRole }) => {
         }
 
         const token = localStorage.getItem("access_token");
-        const endpoint = role === "admin" 
-          ? "/api/employee/admin/profile/" 
-          : "/api/employee/profile/";
-        
-        const response = await fetch(`http://127.0.0.1:8000${endpoint}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        
-        const data = await response.json();
+        const endpoint =
+          role === "admin"
+            ? "employee/admin/profile/"
+            : "employee/profile/";
+
+        const response = await axiosInstance.get(endpoint);
+        const data = response.data;
 
         // SUPPORT BOTH ADMIN & EMPLOYEE RESPONSE SHAPES
         const picture =

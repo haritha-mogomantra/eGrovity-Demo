@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
-import axios from "axios";
+import axiosInstance from "../../../utils/axiosInstance";
 import Profile from "../../../components/profile/Profile";
+
+const DEFAULT_PROFILE = "/default-profile.png";
  
 const AdminProfile = () => {
   const [profileData, setProfileData] = useState(null);
@@ -12,16 +14,17 @@ const AdminProfile = () => {
   useEffect(() => {
     const fetchAdminProfile = async () => {
       try {
-        const response = await axios.get(
-          `http://127.0.0.1:8000/api/employee/admin/profile/`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }
+        const response = await axiosInstance.get(
+          "employee/admin/profile/"
         );
  
         const d = response.data;
+
+        // ✅ Save admin name for header
+        if (d?.personal) {
+          localStorage.setItem("first_name", d.personal.first_name || "");
+          localStorage.setItem("last_name", d.personal.last_name || "");
+        }
 
         if (d.profile_picture_url) {
           localStorage.setItem("profile_picture_url", d.profile_picture_url);

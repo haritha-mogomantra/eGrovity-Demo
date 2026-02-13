@@ -29,7 +29,6 @@ function DynamicPerformanceReport() {
   const [selectedOption, setSelectedOption] = useState("");
 
   const [selectedWeek2, setSelectedWeek2] = useState("");
-  const [maxSelectableWeek, setMaxSelectableWeek] = useState("");
   const [initialWeek, setInitialWeek] = useState("");
   const [isWeekChanged, setIsWeekChanged] = useState(false);
 
@@ -61,14 +60,21 @@ function DynamicPerformanceReport() {
     department: "reports/department/"
   };
 
-  const getCurrentWeek = () => {
+  const getLatestCompletedWeek = () => {
     const today = new Date();
-    const onejan = new Date(today.getFullYear(), 0, 1);
-    const numberOfDays = Math.floor((today - onejan) / (24 * 60 * 60 * 1000));
-    const week = Math.ceil((today.getDay() + 1 + numberOfDays) / 7);
-    return `${today.getFullYear()}-W${String(week).padStart(2, "0")}`;
-  };
 
+    // Move to previous week
+    today.setDate(today.getDate() - 7);
+
+    // ISO week calculation
+    const tempDate = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
+    const dayNum = tempDate.getUTCDay() || 7;
+    tempDate.setUTCDate(tempDate.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(tempDate.getUTCFullYear(), 0, 1));
+    const weekNo = Math.ceil((((tempDate - yearStart) / 86400000) + 1) / 7);
+
+    return `${tempDate.getUTCFullYear()}-W${String(weekNo).padStart(2, "0")}`;
+  };
     
   useEffect(() => {
     // WAIT until bootstrap is loaded
@@ -106,20 +112,14 @@ function DynamicPerformanceReport() {
           setLoading(false);
           return;
         }
-        const res = await axiosInstance.get("/reports/latest-week/");
+        const latestWeek = getLatestCompletedWeek();
 
-        if (res?.data?.week && res?.data?.year) {
-          const backendWeek = `${res.data.year}-W${String(res.data.week).padStart(2, "0")}`;
-          setSelectedWeek2(backendWeek);
+        setSelectedWeek2(latestWeek);
+        setInitialWeek(latestWeek);
+        setIsWeekChanged(false);
 
-          setMaxSelectableWeek(getCurrentWeek());
-
-          setInitialWeek(backendWeek);
-          setIsWeekChanged(false);
-
-          const { year, week } = parseWeek(backendWeek);
-          await fetchReport("weekly", "", "", week, year);
-        }
+        const { year, week } = parseWeek(latestWeek);
+        await fetchReport("weekly", "", "", week, year);
 
       } catch (e) {
         console.error("Failed to load latest week:", e);
@@ -179,16 +179,23 @@ function DynamicPerformanceReport() {
 
     const [year, week] = weekValue.split("-W").map(Number);
 
-    const start = new Date(year, 0, (week - 1) * 7 + 1);
-    const end = new Date(start);
-    end.setDate(start.getDate() + 6);
+    const simple = new Date(Date.UTC(year, 0, 1 + (week - 1) * 7));
+    const dow = simple.getUTCDay();
+    const ISOweekStart = new Date(simple);
+
+    if (dow <= 4)
+      ISOweekStart.setUTCDate(simple.getUTCDate() - simple.getUTCDay() + 1);
+    else
+      ISOweekStart.setUTCDate(simple.getUTCDate() + 8 - simple.getUTCDay());
+
+    const ISOweekEnd = new Date(ISOweekStart);
+    ISOweekEnd.setUTCDate(ISOweekStart.getUTCDate() + 6);
 
     const fmt = (d) =>
       d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 
-    return `${fmt(start)} to ${fmt(end)}`;
+    return `${fmt(ISOweekStart)} to ${fmt(ISOweekEnd)}`;
   };
-
  
   const fetchReport = async (type, manager = "", department = "", week = "", year = "") => {
     try {
@@ -409,60 +416,99 @@ function DynamicPerformanceReport() {
   };
  
   const handlePrint = () => {
-    const dataToPrint = sortedData;  // ALWAYS full sorted + filtered dataset
+    setIsPrinting(true);   
+    const dataToPrint = sortedData;
 
     if (!dataToPrint.length) {
       alert("No data available to print");
+      setIsPrinting(false);   // ✅ ADD THIS
       return;
     }
 
     const title = getReportTitle();
+    const cols = getColumnConfig();
 
-    const buildHeader = () => {
-      const cols = getColumnConfig();
-      return cols.map(c => `<th>${c.label}</th>`).join("");
-    };
+    const headerHtml = cols.map(c => `<th>${c.label}</th>`).join("");
 
-    const buildRows = () => {
-      const cols = getColumnConfig();
-      return dataToPrint
-        .map((emp, index) => `
-          <tr>
-            ${cols.map(c =>
-              c.key === "slno"
-                ? `<td>${index + 1}</td>`
-                : `<td>${emp[c.key]}</td>`
-            ).join("")}
-          </tr>`)
-        .join("");
-    };
+    const rowsHtml = dataToPrint.map((emp, index) => `
+      <tr>
+        ${cols.map(c =>
+          c.key === "slno"
+            ? `<td>${index + 1}</td>`
+            : `<td>${emp[c.key] ?? "-"}</td>`
+        ).join("")}
+      </tr>
+    `).join("");
 
-    const html = `
-      <h3 class="text-center mb-4">${title}</h3>
-      <table class="table table-bordered">
-        <thead><tr>${buildHeader()}</tr></thead>
-        <tbody>${buildRows()}</tbody>
-      </table>
-    `;
+    const printWindow = window.open("", "_blank", "width=1200,height=800");
 
-    const win = window.open("", "_blank", "width=900,height=600");
-    win.document.write(`
+    if (!printWindow) {
+      alert("Popup blocked. Please allow popups for printing.");
+      setIsPrinting(false);   // ✅ ADD THIS
+      return;
+    }
+
+    printWindow.document.write(`
       <html>
-      <head>
-        <title>${title}</title>
-        <link rel="stylesheet"
-              href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-      </head>
-      <body style="padding:20px;">
-        ${html}
-      </body>
+        <head>
+          <title>${title}</title>
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              padding: 20px;
+            }
+            h3 {
+              text-align: center;
+              margin-bottom: 20px;
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+            }
+            th, td {
+              border: 1px solid #000;
+              padding: 6px;
+              font-size: 12px;
+            }
+            th {
+              background-color: #f2f2f2;
+            }
+            @media print {
+              @page {
+                size: A4;
+                margin: 10mm;
+              }
+              thead {
+                display: table-header-group;
+              }
+              tr {
+                page-break-inside: avoid;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          <h3>${title}</h3>
+          <table>
+            <thead>
+              <tr>${headerHtml}</tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+            </tbody>
+          </table>
+        </body>
       </html>
     `);
-    win.document.close();
 
-    win.onload = () => {
-      win.print();
-      win.close();
+    printWindow.document.close();
+
+    printWindow.focus();
+    printWindow.print();
+
+    printWindow.onafterprint = () => {
+      printWindow.close();
+      setIsPrinting(false);
     };
   };
  
@@ -740,8 +786,11 @@ function DynamicPerformanceReport() {
                     // ✅ Clear search term when switching report types
                     setSearchTerm("");
 
-                    // ✅ Auto-load data based on report type
-                    const { year, week } = parseWeek(selectedWeek2);
+                    // ✅ Reset week when switching report type
+                    setSelectedWeek2(initialWeek);
+                    localStorage.setItem("selectedWeek", initialWeek);
+
+                    const { year, week } = parseWeek(initialWeek);
                     if (year && week) {
                       if (type === "manager") {
                         await fetchReport("manager", "ALL_MGR", null, week, year);
@@ -767,16 +816,21 @@ function DynamicPerformanceReport() {
                 type="week"
                 className="form-control"
                 value={selectedWeek2}
-                max={maxSelectableWeek}
+                max={getLatestCompletedWeek()}
                 onChange={(e) => {
                   const value = e.target.value;
+                  const latestWeek = getLatestCompletedWeek();
+
+                  // 🚫 Block current or future week
+                  if (value > latestWeek) {
+                    return;
+                  }
 
                   setSelectedWeek2(value);
                   localStorage.setItem("selectedWeek", value);
 
                   setHasUserInteracted(true);
                   setIsWeekChanged(true);
-
                 }}
               />
             </div>
@@ -1189,21 +1243,38 @@ function DynamicPerformanceReport() {
             <div className="dt-pagination d-flex justify-content-between align-items-center mt-3">
 
               <div className="text-muted" style={{ fontWeight: "normal", margin: 0 }}>
-                Showing {(currentPage - 1) * pageSize + 1} – 
-                {Math.min(currentPage * pageSize, sortedData.length)} of {sortedData.length} records
+                {sortedData.length === 0
+                  ? "Showing 0 – 0 of 0 records"
+                  : `Showing ${(currentPage - 1) * pageSize + 1} – 
+                    ${Math.min(currentPage * pageSize, sortedData.length)} 
+                    of ${sortedData.length} records`}
               </div>
 
               <nav>
                 <ul className="pagination mb-0">
 
                   {/* FIRST */}
-                  <li className={`page-item ${currentPage === 1 ? "disabled" : ""}`}>
-                    <button className="page-link" onClick={() => setCurrentPage(1)}>«</button>
+                  <li className={`page-item ${currentPage === 1 || totalPages === 0 ? "disabled" : ""}`}>
+                    <button
+                      className="page-link"
+                      onClick={() => {
+                        if (totalPages > 0) setCurrentPage(1);
+                      }}
+                    >
+                      «
+                    </button>
                   </li>
 
                   {/* PREVIOUS */}
-                  <li className={`page-item ${currentPage === 1 ? "disabled" : ""}`}>
-                    <button className="page-link" onClick={() => setCurrentPage(currentPage - 1)}>‹</button>
+                  <li className={`page-item ${currentPage === 1 || totalPages === 0 ? "disabled" : ""}`}>
+                    <button
+                      className="page-link"
+                      onClick={() => {
+                        if (currentPage > 1) setCurrentPage(currentPage - 1);
+                      }}
+                    >
+                      ‹
+                    </button>
                   </li>
 
                   {/* DYNAMIC PAGE NUMBERS */}
@@ -1211,18 +1282,37 @@ function DynamicPerformanceReport() {
                     .filter(p => p >= currentPage - 2 && p <= currentPage + 2)
                     .map(p => (
                       <li key={p} className={`page-item ${currentPage === p ? "active" : ""}`}>
-                        <button className="page-link" onClick={() => setCurrentPage(p)}>{p}</button>
+                        <button
+                          className="page-link"
+                          onClick={() => setCurrentPage(p)}
+                        >
+                          {p}
+                        </button>
                       </li>
                     ))}
 
                   {/* NEXT */}
-                  <li className={`page-item ${currentPage === totalPages ? "disabled" : ""}`}>
-                    <button className="page-link" onClick={() => setCurrentPage(currentPage + 1)}>›</button>
+                  <li className={`page-item ${currentPage >= totalPages || totalPages === 0 ? "disabled" : ""}`}>
+                    <button
+                      className="page-link"
+                      onClick={() => {
+                        if (currentPage < totalPages) setCurrentPage(currentPage + 1);
+                      }}
+                    >
+                      ›
+                    </button>
                   </li>
 
                   {/* LAST */}
-                  <li className={`page-item ${currentPage === totalPages ? "disabled" : ""}`}>
-                    <button className="page-link" onClick={() => setCurrentPage(totalPages)}>»</button>
+                  <li className={`page-item ${currentPage >= totalPages || totalPages === 0 ? "disabled" : ""}`}>
+                    <button
+                      className="page-link"
+                      onClick={() => {
+                        if (totalPages > 0) setCurrentPage(totalPages);
+                      }}
+                    >
+                      »
+                    </button>
                   </li>
 
                 </ul>

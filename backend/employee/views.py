@@ -116,7 +116,8 @@ class EmployeeViewSet(viewsets.ModelViewSet):
     queryset = Employee.objects.select_related("user", "department", "manager").prefetch_related("team_members")
     permission_classes = [permissions.IsAuthenticated]
     pagination_class = DefaultPagination
-    lookup_field = "emp_id"
+    lookup_field = "user__emp_id"
+    lookup_url_kwarg = "emp_id"
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ["status"]
     search_fields = [
@@ -259,21 +260,15 @@ class EmployeeViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
  
 
-    def get_object(self):
+    '''def get_object(self):
         emp_id = self.kwargs.get("emp_id")
 
-        # RULE 1 — If starts with EMP, format is always valid (NO LENGTH CHECK)
-        if emp_id.upper().startswith("EMP") and not emp_id[3:].isdigit():
-            # Example: EMP, EMP0, EMP00, EMPA → valid format but incomplete → return None
-            return None
-
-        # RULE 2 — Query actual employee table
         try:
-            return Employee.objects.select_related("user", "department", "manager").get(
-                user__emp_id__iexact=emp_id
-            )
+            return Employee.objects.select_related(
+                "user", "department", "manager"
+            ).get(user__emp_id__iexact=emp_id)
         except Employee.DoesNotExist:
-            raise NotFound(detail=f"Employee with emp_id '{emp_id}' not found.")
+            raise NotFound(detail=f"Employee with emp_id '{emp_id}' not found.")'''
 
 
     @transaction.atomic

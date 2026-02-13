@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import axios from "axios";
+import axiosInstance from "../../../utils/axiosInstance";
 import Profile from "../../../components/profile/Profile";
  
 const EmployeeProfile = () => {
@@ -14,13 +14,8 @@ const EmployeeProfile = () => {
     useEffect(() => {
     const fetchEmployeeProfile = async () => {
         try {
-        const response = await axios.get(
-            `http://127.0.0.1:8000/api/employee/profile/`,
-            {
-            headers: {
-                Authorization: `Bearer ${token}`,
-            },
-            }
+        const response = await axiosInstance.get(
+            "employee/profile/"
         );
 
         const d = response.data;

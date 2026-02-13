@@ -862,29 +862,38 @@ class PerformanceByEmployeeWeekAPIView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
-        emp_id = request.query_params.get("emp_id")
+
+        # ✅ 1. Always derive employee from logged-in user
+        try:
+            employee = Employee.objects.get(user=request.user)
+        except Employee.DoesNotExist:
+            return Response({"error": "Employee profile not found"}, status=404)
+
         week = request.query_params.get("week")
         year = request.query_params.get("year")
 
+        # ✅ 2. Normalize safely
         try:
-            employee = Employee.objects.get(user__emp_id=emp_id)
-        except Employee.DoesNotExist:
-            return Response({"error": "Employee not found"}, status=404)
+            week = int(week) if week else None
+            year = int(year) if year else None
+        except ValueError:
+            return Response({"error": "Invalid week/year"}, status=400)
 
-        # ✅ If week/year NOT provided, get latest for that employee
-        if not week or not year:
+        # ✅ 3. Filter correctly using week_number
+        if week and year:
+            evaluation = PerformanceEvaluation.objects.filter(
+                employee=employee,
+                week_number=week,
+                year=year
+            ).first()
+        else:
+            # fallback → latest available week for this employee
             evaluation = PerformanceEvaluation.objects.filter(
                 employee=employee
             ).order_by("-year", "-week_number").first()
-        else:
-            evaluation = PerformanceEvaluation.objects.filter(
-                employee=employee,
-                week_number=int(week),
-                year=int(year)
-            ).first()
 
         if not evaluation:
-            return Response({"metrics": []}, status=200)
+            return Response({}, status=200)
 
         serializer = PerformanceEvaluationSerializer(evaluation)
         return Response(serializer.data, status=200)

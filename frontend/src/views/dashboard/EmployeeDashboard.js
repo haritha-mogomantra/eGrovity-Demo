@@ -21,7 +21,17 @@ ChartJS.register(BarElement, CategoryScale, LinearScale, Tooltip, Legend);
  */
 
 function EmployeeDashboard() {
-  const empId = localStorage.getItem("emp_id");
+  const [empId, setEmpId] = useState(null);
+
+  useEffect(() => {
+    const storedEmpId =
+      localStorage.getItem("emp_id") ||
+      JSON.parse(localStorage.getItem("user") || "{}")?.emp_id;
+
+    if (storedEmpId) {
+      setEmpId(storedEmpId);
+    }
+  }, []);
 
   const [employeeInfo, setEmployeeInfo] = useState({
     name: "-",
@@ -38,26 +48,33 @@ function EmployeeDashboard() {
   const fetchEmployeeInfo = async () => {
     try {
         const res = await axiosInstance.get(
-        `employee/employees/employee/${empId}/`
-        );
+          `employee/employees/${empId}/`
+      );
 
         const firstName =
-        res.data.user?.first_name ||
-        res.data.first_name ||
-        "";
+          res.data.user?.first_name ??
+          res.data.first_name ??
+          res.data.employee_name?.split(" ")[0] ??
+          "";
 
         const lastName =
-        res.data.user?.last_name ||
-        res.data.last_name ||
-        "";
+          res.data.user?.last_name ??
+          res.data.last_name ??
+          res.data.employee_name?.split(" ").slice(1).join(" ") ??
+          "";
 
         setEmployeeInfo({
-        name: `${firstName} ${lastName}`.trim() || "-",
-        department:
+          name:
+            res.data.user?.first_name && res.data.user?.last_name
+              ? `${res.data.user.first_name} ${res.data.user.last_name}`
+              : res.data.user?.username || "-",
+
+          department:
             res.data.department_name ||
             res.data.department ||
             "-",
-        manager:
+
+          manager:
             res.data.manager_name ||
             res.data.reporting_manager_name ||
             "-",
@@ -93,27 +110,54 @@ function EmployeeDashboard() {
 
   // ---------------- CALCULATE CURRENT WEEK ----------------
   const getCurrentWeek = () => {
-    const today = new Date();
-    const year = today.getFullYear();
-    const startOfYear = new Date(year, 0, 1);
-    const days = Math.floor((today - startOfYear) / (24 * 60 * 60 * 1000));
-    const week = Math.ceil((days + startOfYear.getDay() + 1) / 7);
-    return { year, week: Math.max(1, Math.min(week, 53)) };
+    const now = new Date();
+    const tempDate = new Date(Date.UTC(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate()
+    ));
+
+    const dayNum = tempDate.getUTCDay() || 7;
+    tempDate.setUTCDate(tempDate.getUTCDate() + 4 - dayNum);
+
+    const yearStart = new Date(Date.UTC(tempDate.getUTCFullYear(), 0, 1));
+
+    const week = Math.ceil(
+      (((tempDate - yearStart) / 86400000) + 1) / 7
+    );
+
+    return {
+      year: tempDate.getUTCFullYear(),
+      week
+    };
   };
 
   // ---------------- INITIAL LOAD ----------------
   useEffect(() => {
-    if (!empId) {
-      setError("Employee ID not found. Please log in again.");
-      return;
-    }
+    if (!empId) return;
 
     fetchEmployeeInfo();
 
-    const { year, week } = getCurrentWeek();
-    const defaultWeek = `${year}-W${String(week).padStart(2, "0")}`;
-    setSelectedWeek(defaultWeek);
-    fetchPerformance(week, year);
+    const loadLatestWeek = async () => {
+      try {
+        const res = await axiosInstance.get("performance/latest-week/", {
+          params: { emp_id: empId }
+        });
+
+        const { week, year } = res.data;
+
+        if (week && year) {
+          const defaultWeek = `${year}-W${String(week).padStart(2, "0")}`;
+          setSelectedWeek(defaultWeek);
+          fetchPerformance(week, year);
+        }
+      } catch (err) {
+        console.error("Latest week fetch error:", err);
+      }
+    };
+
+    loadLatestWeek();
+
   }, [empId]);
 
   // ---------------- WEEK CHANGE HANDLER ----------------

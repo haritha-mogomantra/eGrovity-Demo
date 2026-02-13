@@ -102,6 +102,7 @@ pymysql.install_as_MySQLdb()
     }
 }'''
 
+'''
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
@@ -111,7 +112,22 @@ DATABASES = {
         'HOST': '100.103.210.2',
         'PORT': '3306',
     }
+}'''
+
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'epts_project_db',
+        'USER': 'epts_user',
+        'PASSWORD': 'Epts@12345',
+        'HOST': 'localhost',
+        'PORT': '3306',
+        'OPTIONS': {
+            'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+        },
+    }
 }
+
 
 
 # -------------------------------------------------------------------
